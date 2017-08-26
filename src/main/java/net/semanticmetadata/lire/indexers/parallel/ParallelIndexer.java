@@ -103,7 +103,6 @@ public class ParallelIndexer implements Runnable {
     private boolean globalHashing = false;
     private GlobalDocumentBuilder.HashingMode globalHashingMode = GlobalDocumentBuilder.HashingMode.BitSampling;
 
-    private IndexWriter writer;
     private String imageDirectory, indexPath;
     private File imageList = null;
     private List<String> allImages, sampleImages;
@@ -126,6 +125,8 @@ public class ParallelIndexer implements Runnable {
     private HashMap<String, Document> allDocuments;
 
     private ImagePreprocessor imagePreprocessor;
+
+    private ParallelIndexWriter parallelIndexWriter;
 
     // Note that you can edit the queue size here. 100 is a good value, but I'd raise it to 200.
     private int queueCapacity = 200;
@@ -202,51 +203,38 @@ public class ParallelIndexer implements Runnable {
                 "number of threads ... The number of threads used for extracting features, e.g. # of CPU cores.");
     }
 
-
-    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory) {
+    private ParallelIndexer(int numOfThreads, String indexPath) {
         this.numOfThreads = numOfThreads;
         this.indexPath = indexPath;
+    }
+
+    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory) {
+        this(numOfThreads, indexPath);
         this.imageDirectory = imageDirectory;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, int numOfClusters, int numOfDocsForCodebooks) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
-        this.numOfClusters = new int[]{numOfClusters};
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
+        this(numOfThreads, indexPath, imageDirectory, new int[]{numOfClusters}, numOfDocsForCodebooks);
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, int numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
-        this.numOfClusters = new int[]{numOfClusters};
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
+        this(numOfThreads, indexPath, imageDirectory, numOfClusters, numOfDocsForCodebooks);
         this.aggregator = aggregator;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, int[] numOfClusters, int numOfDocsForCodebooks) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
+        this(numOfThreads, indexPath, imageDirectory);
         this.numOfClusters = numOfClusters;
         this.numOfDocsForCodebooks = numOfDocsForCodebooks;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, int[] numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
-        this.numOfClusters = numOfClusters;
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
+        this(numOfThreads, indexPath, imageDirectory, numOfClusters, numOfDocsForCodebooks);
         this.aggregator = aggregator;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, boolean overWrite) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
+        this(numOfThreads, indexPath, imageDirectory);
         this.overWrite = overWrite;
         if ((!overWrite) && ((new File(indexPath)).exists())) {
             this.appending = true;
@@ -255,64 +243,8 @@ public class ParallelIndexer implements Runnable {
         } else throw new UnsupportedOperationException("Error in trying to append index...");
     }
 
-//    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, boolean overWrite, int numOfClusters, int numOfDocsForCodebooks) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageDirectory = imageDirectory;
-//        this.numOfClusters = new int[] {numOfClusters};
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, boolean overWrite, int numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageDirectory = imageDirectory;
-//        this.numOfClusters = new int[] {numOfClusters};
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.aggregator = aggregator;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, boolean overWrite, int[] numOfClusters, int numOfDocsForCodebooks) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageDirectory = imageDirectory;
-//        this.overWrite = overWrite;
-//        this.numOfClusters = numOfClusters;
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, boolean overWrite, int[] numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageDirectory = imageDirectory;
-//        this.numOfClusters = numOfClusters;
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.aggregator = aggregator;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, String fromIndexPath) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
+        this(numOfThreads, indexPath, imageDirectory);
         if ((new File(fromIndexPath)).exists()) {
             (new File(indexPath + ".config/")).mkdirs();
             loadPropertiesFile(fromIndexPath + ".config/");
@@ -323,8 +255,7 @@ public class ParallelIndexer implements Runnable {
 
     //imageList
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
+        this(numOfThreads, indexPath);
         this.imageList = imageList;
     }
 
@@ -337,9 +268,7 @@ public class ParallelIndexer implements Runnable {
      * @param hashingMode  the mode used for Hashing, use HashingMode.None if you don't want hashing.
      */
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, GlobalDocumentBuilder.HashingMode hashingMode) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
+        this(numOfThreads, indexPath, imageList);
         if (hashingMode != GlobalDocumentBuilder.HashingMode.None) {
             this.globalHashing = true;
         } else this.globalHashing = false;
@@ -355,12 +284,8 @@ public class ParallelIndexer implements Runnable {
      * @param hashingMode  the mode used for Hashing, use HashingMode.None if you don't want hashing.
      */
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, GlobalDocumentBuilder.HashingMode hashingMode) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
-        if (hashingMode != GlobalDocumentBuilder.HashingMode.None) {
-            this.globalHashing = true;
-        } else this.globalHashing = false;
+        this(numOfThreads, indexPath, imageDirectory);
+        this.globalHashing = hashingMode != GlobalDocumentBuilder.HashingMode.None;
         this.globalHashingMode = hashingMode;
     }
 
@@ -374,15 +299,7 @@ public class ParallelIndexer implements Runnable {
      * @param useDocValues set to true if you want to use DocValues instead of Fields.
      */
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, GlobalDocumentBuilder.HashingMode hashingMode, boolean useDocValues) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
-        if (hashingMode != GlobalDocumentBuilder.HashingMode.None) {
-            this.globalHashing = true;
-        } else {
-            this.globalHashing = false;
-        }
-        this.globalHashingMode = hashingMode;
+        this(numOfThreads, indexPath, imageList, hashingMode);
         this.useDocValues = useDocValues;
     }
 
@@ -396,16 +313,9 @@ public class ParallelIndexer implements Runnable {
      * @param useDocValues set to true if you want to use DocValues instead of Fields.
      */
     public ParallelIndexer(int numOfThreads, String indexPath, String imageDirectory, GlobalDocumentBuilder.HashingMode hashingMode, boolean useDocValues) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageDirectory = imageDirectory;
-        if (hashingMode != GlobalDocumentBuilder.HashingMode.None) {
-            this.globalHashing = true;
-        } else {
-            this.globalHashing = false;
-        }
+        this(numOfThreads, indexPath, imageDirectory, useDocValues);
+        this.globalHashing = hashingMode != GlobalDocumentBuilder.HashingMode.None;
         this.globalHashingMode = hashingMode;
-        this.useDocValues = useDocValues;
     }
 
     /**
@@ -419,58 +329,32 @@ public class ParallelIndexer implements Runnable {
      * @param queueSize    the size of the reading queue to minimize disk usage.
      */
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, GlobalDocumentBuilder.HashingMode hashingMode, boolean useDocValues, int queueSize) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
-        if (hashingMode != GlobalDocumentBuilder.HashingMode.None) {
-            this.globalHashing = true;
-        } else {
-            this.globalHashing = false;
-        }
-        this.globalHashingMode = hashingMode;
-        this.useDocValues = useDocValues;
+        this(numOfThreads, indexPath, imageList, hashingMode, useDocValues);
         queueCapacity = queueSize;
         queue = new LinkedBlockingQueue<>(queueSize);
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, int numOfClusters, int numOfDocsForCodebooks) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
-        this.numOfClusters = new int[]{numOfClusters};
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
+        this(numOfThreads, indexPath, imageList, new int[]{numOfClusters}, numOfDocsForCodebooks);
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, int numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
-        this.numOfClusters = new int[]{numOfClusters};
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-        this.aggregator = aggregator;
+        this(numOfThreads, indexPath, imageList, new int[]{numOfClusters}, numOfDocsForCodebooks, aggregator);
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, int[] numOfClusters, int numOfDocsForCodebooks) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
+        this(numOfThreads, indexPath, imageList);
         this.numOfClusters = numOfClusters;
         this.numOfDocsForCodebooks = numOfDocsForCodebooks;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, int[] numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
-        this.numOfClusters = numOfClusters;
-        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
+        this(numOfThreads, indexPath, imageList, numOfClusters, numOfDocsForCodebooks);
         this.aggregator = aggregator;
     }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, boolean overWrite) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
+        this(numOfThreads, indexPath, imageList);
         this.overWrite = overWrite;
         if ((!overWrite) && ((new File(indexPath)).exists())) {
             this.appending = true;
@@ -479,64 +363,9 @@ public class ParallelIndexer implements Runnable {
         } else throw new UnsupportedOperationException("Error in trying to append index...");
     }
 
-//    public ParallelIndexer(int numOfThreads, String indexPath, File imageList, boolean overWrite, int numOfClusters, int numOfDocsForCodebooks) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageList = imageList;
-//        this.numOfClusters = new int[] {numOfClusters};
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, File imageList, boolean overWrite, int numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageList = imageList;
-//        this.numOfClusters = new int[] {numOfClusters};
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.aggregator = aggregator;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, File imageList, boolean overWrite, int[] numOfClusters, int numOfDocsForCodebooks) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageList = imageList;
-//        this.overWrite = overWrite;
-//        this.numOfClusters = numOfClusters;
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
-//
-//    public ParallelIndexer(int numOfThreads, String indexPath, File imageList, boolean overWrite, int[] numOfClusters, int numOfDocsForCodebooks, Class<? extends AbstractAggregator> aggregator) {
-//        this.numOfThreads = numOfThreads;
-//        this.indexPath = indexPath;
-//        this.imageList = imageList;
-//        this.numOfClusters = numOfClusters;
-//        this.numOfDocsForCodebooks = numOfDocsForCodebooks;
-//        this.aggregator = aggregator;
-//        this.overWrite = overWrite;
-//        if (!overWrite) {
-//            loadPropertiesFile(indexPath + ".config/");
-//            this.lockLists = true;
-//        }
-//    }
 
     public ParallelIndexer(int numOfThreads, String indexPath, File imageList, String fromIndexPath) {
-        this.numOfThreads = numOfThreads;
-        this.indexPath = indexPath;
-        this.imageList = imageList;
+        this(numOfThreads, indexPath, imageList);
         if ((new File(fromIndexPath)).exists()) {
             (new File(indexPath + ".config/")).mkdirs();
             loadPropertiesFile(fromIndexPath + ".config/");
@@ -745,8 +574,8 @@ public class ParallelIndexer implements Runnable {
     public void run() {
         lockLists = true;
         try {
+            this.parallelIndexWriter = this.parallelIndexWriter == null ? new ParallelIndexWriter(indexPath, overWrite) : this.parallelIndexWriter;
             long start = System.currentTimeMillis();
-            writer = LuceneUtils.createIndexWriter(indexPath, overWrite, LuceneUtils.AnalyzerType.WhitespaceAnalyzer);
             if (imageList == null) {
 //                allImages = FileUtils.getAllImages(new File(imageDirectory), true); //TODO: change to readFileLines
                 allImages = FileUtils.readFileLines(new File(imageDirectory), true);
@@ -800,9 +629,7 @@ public class ParallelIndexer implements Runnable {
 
             System.out.printf("Total time of indexing: %s.\n", convertTime(System.currentTimeMillis() - start));
 
-            LuceneUtils.commitWriter(writer);
-            LuceneUtils.optimizeWriter(writer);
-            LuceneUtils.closeWriter(writer);
+            parallelIndexWriter.finishedIndexing();
 
             if (!appending) {
                 writePropertiesFile();
@@ -820,9 +647,9 @@ public class ParallelIndexer implements Runnable {
         long start = System.currentTimeMillis();
         try {
             for (Map.Entry<String, Document> documentEntry : allDocuments.entrySet()) {
-                writer.addDocument(documentEntry.getValue());
+                parallelIndexWriter.addDocument(documentEntry.getValue());
             }
-            LuceneUtils.commitWriter(writer);
+            parallelIndexWriter.commitWriter();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -1237,7 +1064,7 @@ public class ParallelIndexer implements Runnable {
         public void run() {
             WorkItem tmp = null;
             Document doc;
-            Field[] fields;
+            List<Field> fields = new ArrayList<>();
             BufferedImage image;
             while (!locallyEnded) {
                 try {
@@ -1255,19 +1082,11 @@ public class ParallelIndexer implements Runnable {
                             image = imagePreprocessor.process(image);
                         }
                         doc = localCustomDocumentBuilder.createDocument(image, tmp.getFileName());
-                        fields = globalDocumentBuilder.createDescriptorFields(image);
-                        for (Field field : fields) {
-                            doc.add(field);
-                        }
-                        fields = localDocumentBuilder.createDescriptorFields(image);
-                        for (Field field : fields) {
-                            doc.add(field);
-                        }
-                        fields = simpleDocumentBuilder.createDescriptorFields(image);
-                        for (Field field : fields) {
-                            doc.add(field);
-                        }
-                        writer.addDocument(doc);
+                        fields.addAll(Arrays.asList(globalDocumentBuilder.createDescriptorFields(image)));
+                        fields.addAll(Arrays.asList(localDocumentBuilder.createDescriptorFields(image)));
+                        fields.addAll(Arrays.asList(simpleDocumentBuilder.createDescriptorFields(image)));
+                        parallelIndexWriter.addDocument(doc, fields);
+                        fields.clear();
                     }
                 } catch (InterruptedException | IOException e) {
                     log.severe(e.getMessage() + ": " + tmp!=null?tmp.getFileName():"");
